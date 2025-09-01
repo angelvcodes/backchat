@@ -3,13 +3,16 @@ import cors from "cors";
 import fetch from "node-fetch";
 import type { Request, Response } from "express";
 
+// 👇 Importar RAG sin extensión
+import { loadKnowledge, retrieveContext } from "./rag.js";
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // ---------------- Sesiones ----------------
 interface ChatMessage {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
   timestamp: number;
 }
@@ -23,46 +26,51 @@ const sessions: Record<string, Session> = {};
 const SESSION_EXPIRATION = 30 * 60 * 1000; // 30 min
 
 // Limpiar sesiones expiradas
-const cleanExpiredSessions = () => {
+setInterval(() => {
   const now = Date.now();
-  for (const sessionId in sessions) {
-    const session = sessions[sessionId];
-    if (!session) continue;
+  for (const id in sessions) {
+  const session = sessions[id];
+  if (!session) continue; // ✅ evita undefined
 
-    if (now - session.lastActive > SESSION_EXPIRATION) {
-      console.log(`🗑️ Sesión ${sessionId} eliminada por inactividad`);
-      delete sessions[sessionId];
-    }
+  if (Date.now() - session.lastActive > SESSION_EXPIRATION) {
+    console.log(`🗑️ Sesión ${id} eliminada por inactividad`);
+    delete sessions[id];
   }
-};
-setInterval(cleanExpiredSessions, 5 * 60 * 1000);
+}
+}, 5 * 60 * 1000);
 
-// ---------------- Función de respuesta IA ----------------
+// ---------------- Respuesta IA ----------------
+interface LMChoice {
+  message: { role: "assistant" | "user" | "system"; content: string };
+}
+interface LMResponse {
+  choices: LMChoice[];
+}
+
+function isLMResponse(data: any): data is LMResponse {
+  return Array.isArray(data?.choices) && data.choices.every((c: LMChoice) => !!c?.message?.content);
+
+}
+
 async function generateAIResponse(messages: ChatMessage[]): Promise<string> {
   try {
-    if (!messages.length) return "⚠️ No hay mensajes para responder.";
-
-    // LM Studio espera un array de mensajes
-    const lmResponse = await fetch("http://localhost:1234/v1/chat/completions", {
+    const lmResponse = await fetch("http://10.0.0.17:1234/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt4all", // ajusta según tu modelo
+        model: "llama-3.1-8b-ultralong-1m-instruct",
         messages: messages.map(m => ({ role: m.role, content: m.content })),
-        max_new_tokens: 200,
-        temperature: 0.7
-      })
+        max_tokens: 200,
+        temperature: 0.7,
+        stream: false,
+      }),
     });
 
-    const data: unknown = await lmResponse.json();
-
-    if (typeof data === "object" && data !== null && "text" in data) {
-      return (data as { text?: string }).text || "Lo siento, no pude generar respuesta.";
-    }
-
-    return "Lo siento, no pude generar respuesta.";
+    const raw = await lmResponse.json();
+    if (!isLMResponse(raw)) return "⚠️ Respuesta inesperada del modelo.";
+    return raw.choices[0]?.message?.content ?? "⚠️ Respuesta vacía del modelo.";
   } catch (err) {
-    console.error("❌ Error al generar respuesta:", err);
+    console.error(err);
     return "⚠️ Error al conectar con el modelo de IA.";
   }
 }
@@ -73,34 +81,40 @@ app.post("/chat", async (req: Request, res: Response) => {
   if (!sessionId || !message) return res.status(400).json({ error: "Falta sessionId o mensaje" });
 
   if (!sessions[sessionId]) sessions[sessionId] = { messages: [], lastActive: Date.now() };
-
   const session = sessions[sessionId];
   session.lastActive = Date.now();
+
   session.messages.push({ role: "user", content: message, timestamp: Date.now() });
 
-  const respuesta = await generateAIResponse(session.messages);
+  // 🔑 Buscar siempre contexto
+  const context = await retrieveContext(message);
+  const finalMessages: ChatMessage[] = [
+    {
+      role: "system",
+      content: context?.trim()
+        ? `Usa este contexto como referencia del documento:\n${context}`
+        : "No encontré información relevante en el documento. Responde de manera general con tu conocimiento.",
+      timestamp: Date.now(),
+    },
+    ...session.messages,
+  ];
 
+  const respuesta = await generateAIResponse(finalMessages);
   session.messages.push({ role: "assistant", content: respuesta, timestamp: Date.now() });
 
-  console.log(`\n📌 Conversación [${sessionId}] (actualizada)`);
-  session.messages.forEach((msg, i) => {
-    console.log(`${i + 1}. ${msg.role.toUpperCase()}: ${msg.content}`);
-  });
-
-  res.json({ textResponse: respuesta });
+  res.json({ textResponse: respuesta, contextFound: !!context?.trim() });
 });
 
 // ---------------- Endpoint /history ----------------
 app.get("/history/:sessionId", (req, res) => {
-  const sessionId = req.params.sessionId;
-  if (!sessionId) return res.status(400).json({ error: "Falta sessionId" });
-
-  const session = sessions[sessionId];
+  const session = sessions[req.params.sessionId];
   if (!session) return res.status(404).json({ error: "Sesión no encontrada" });
-
   res.json(session.messages);
 });
 
 // ---------------- Iniciar servidor ----------------
 const PORT = 3001;
-app.listen(PORT, () => console.log(`🚀 Backend listo en http://localhost:${PORT}`));
+app.listen(PORT, async () => {
+  console.log(`🚀 Backend listo en http://localhost:${PORT}`);
+  await loadKnowledge();
+});

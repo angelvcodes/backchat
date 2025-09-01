@@ -1,75 +1,89 @@
-// server.ts
 import express from "express";
 import cors from "cors";
-import { v4 as uuidv4 } from "uuid";
 import fetch from "node-fetch";
-// -------------------
-// Configuración express
-// -------------------
+// 👇 Importar RAG sin extensión .js
+import { loadKnowledge, retrieveContext } from "./rag.js";
 const app = express();
-app.use(cors({
-    origin: "http://localhost:3000", // cámbialo a tu frontend real en prod
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-}));
-app.options("*", cors());
+app.use(cors());
 app.use(express.json());
-// -------------------
-// Sesiones en memoria
-// -------------------
 const sessions = {};
-// Crear nueva sesión con system prompt inicial
-app.get("/new-session", (req, res) => {
-    const sessionId = uuidv4();
-    sessions[sessionId] = [
-        { role: "system", content: "Eres un asistente útil y siempre respondes en español." }
-    ];
-    res.json({ sessionId });
-});
-// -------------------
-// Chat endpoint
-// -------------------
-app.post("/chat", async (req, res) => {
-    const { sessionId, message } = req.body;
-    if (!sessionId || !message) {
-        return res.status(400).json({ error: "sessionId y message son requeridos" });
+const SESSION_EXPIRATION = 30 * 60 * 1000; // 30 min
+// Limpiar sesiones expiradas
+setInterval(() => {
+    const now = Date.now();
+    for (const id in sessions) {
+        const session = sessions[id];
+        if (!session)
+            continue; // ✅ evita undefined
+        if (Date.now() - session.lastActive > SESSION_EXPIRATION) {
+            console.log(`🗑️ Sesión ${id} eliminada por inactividad`);
+            delete sessions[id];
+        }
     }
-    if (!sessions[sessionId]) {
-        sessions[sessionId] = [
-            { role: "system", content: "Eres un asistente útil y siempre respondes en español." }
-        ];
-    }
-    // Guardar mensaje del usuario
-    sessions[sessionId].push({ role: "user", content: message });
-    console.log("➡️ Petición recibida:", { sessionId, message });
+}, 5 * 60 * 1000);
+function isLMResponse(data) {
+    return Array.isArray(data?.choices) && data.choices.every((c) => !!c?.message?.content);
+}
+async function generateAIResponse(messages) {
     try {
-        // Petición al LLM
-        const llmRes = await fetch("http://127.0.0.1:1234/v1/chat/completions", {
+        const lmResponse = await fetch("http://10.0.0.17:1234/v1/chat/completions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                model: "meta-llama-3-8b-instruct",
-                messages: sessions[sessionId],
+                model: "llama-3.1-8b-ultralong-1m-instruct",
+                messages: messages.map(m => ({ role: m.role, content: m.content })),
+                max_tokens: 200,
                 temperature: 0.7,
-                max_tokens: 512, // ⚡ evita -1
-                stream: false // ⚡ corregido (minúscula)
+                stream: false,
             }),
         });
-        const data = await llmRes.json();
-        const botResponse = data?.choices?.[0]?.message?.content || "No entendí.";
-        // Guardar respuesta en la sesión
-        sessions[sessionId].push({ role: "assistant", content: botResponse });
-        console.log("🤖 Respuesta del LLM:", botResponse);
-        res.json({ textResponse: botResponse });
+        const raw = await lmResponse.json();
+        if (!isLMResponse(raw))
+            return "⚠️ Respuesta inesperada del modelo.";
+        return raw.choices[0]?.message?.content ?? "⚠️ Respuesta vacía del modelo.";
     }
-    catch (error) {
-        console.error("❌ Error al conectar con LLM:", error);
-        res.status(500).json({ textResponse: "Error en el servidor." });
+    catch (err) {
+        console.error(err);
+        return "⚠️ Error al conectar con el modelo de IA.";
     }
+}
+// ---------------- Endpoint /chat ----------------
+app.post("/chat", async (req, res) => {
+    const { sessionId, message } = req.body;
+    if (!sessionId || !message)
+        return res.status(400).json({ error: "Falta sessionId o mensaje" });
+    if (!sessions[sessionId])
+        sessions[sessionId] = { messages: [], lastActive: Date.now() };
+    const session = sessions[sessionId];
+    session.lastActive = Date.now();
+    session.messages.push({ role: "user", content: message, timestamp: Date.now() });
+    // 🔑 Buscar siempre contexto
+    const context = await retrieveContext(message);
+    const finalMessages = [
+        {
+            role: "system",
+            content: context?.trim()
+                ? `Usa este contexto como referencia del documento:\n${context}`
+                : "No encontré información relevante en el documento. Responde de manera general con tu conocimiento.",
+            timestamp: Date.now(),
+        },
+        ...session.messages,
+    ];
+    const respuesta = await generateAIResponse(finalMessages);
+    session.messages.push({ role: "assistant", content: respuesta, timestamp: Date.now() });
+    res.json({ textResponse: respuesta, contextFound: !!context?.trim() });
 });
-// -------------------
-// Server start
-// -------------------
+// ---------------- Endpoint /history ----------------
+app.get("/history/:sessionId", (req, res) => {
+    const session = sessions[req.params.sessionId];
+    if (!session)
+        return res.status(404).json({ error: "Sesión no encontrada" });
+    res.json(session.messages);
+});
+// ---------------- Iniciar servidor ----------------
 const PORT = 3001;
-app.listen(PORT, () => console.log(`✅ Backend listo en http://localhost:${PORT}`));
+app.listen(PORT, async () => {
+    console.log(`🚀 Backend listo en http://localhost:${PORT}`);
+    await loadKnowledge();
+});
 //# sourceMappingURL=server.js.map

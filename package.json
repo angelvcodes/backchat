@@ -5,13 +5,15 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "ts-node src/server.ts",
+   
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+     "dev": "ts-node --esm src/server.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "mammoth": "^1.10.0",
     "node-fetch": "^3.3.2",
     "uuid": "^9.0.1"
   },

@@ -4,7 +4,7 @@ import fetch from "node-fetch";
 import type { Request, Response } from "express";
 
 // 👇 Importar RAG sin extensión
-import { loadKnowledge, retrieveContext } from "./rag.js";
+import { loadKnowledge, retrieveContext } from "./rag.ts";
 
 const app = express();
 app.use(cors());
@@ -80,29 +80,50 @@ app.post("/chat", async (req: Request, res: Response) => {
   const { sessionId, message } = req.body;
   if (!sessionId || !message) return res.status(400).json({ error: "Falta sessionId o mensaje" });
 
+  // Inicializar sesión si no existe
   if (!sessions[sessionId]) sessions[sessionId] = { messages: [], lastActive: Date.now() };
   const session = sessions[sessionId];
   session.lastActive = Date.now();
 
+  // Guardar mensaje del usuario
   session.messages.push({ role: "user", content: message, timestamp: Date.now() });
 
-  // 🔑 Buscar siempre contexto
-  const context = await retrieveContext(message);
-  const finalMessages: ChatMessage[] = [
-    {
-      role: "system",
-      content: context?.trim()
-        ? `Usa este contexto como referencia del documento:\n${context}`
-        : "No encontré información relevante en el documento. Responde de manera general con tu conocimiento.",
-      timestamp: Date.now(),
-    },
-    ...session.messages,
-  ];
+  // 📝 Imprimir historial completo de la sesión
+  console.log(`\n💬 Historial de sesión ${sessionId}:`);
+  session.messages.forEach((msg, index) => {
+    const time = new Date(msg.timestamp).toLocaleTimeString();
+    console.log(`[${sessionId}] [${index + 1}] [${time}] ${msg.role.toUpperCase()}: ${msg.content}`);
+  });
 
+  // 🔑 Recuperar contexto del documento
+  const context = await retrieveContext(message);
+
+  // ❌ Si no hay contexto relevante, no responder
+  if (!context?.trim()) {
+    return res.json({
+      textResponse: "⚠️ Lo siento, no tengo información en la base de conocimiento. Es posible que tu pregunta no esté redactada de la mejor forma; intenta hacerla más precisa, breve y clara.",
+      contextFound: false,
+    });
+  }
+
+  // Preparar mensajes para el modelo solo con contexto válido
+ const finalMessages: ChatMessage[] = [
+  {
+    role: "system",
+    content: `Responde SOLO usando la información del siguiente contexto. 
+Si el usuario pregunta algo fuera del contexto, responde con "⚠️ No hay información relevante en la base de conocimiento.". 
+No inventes información. 
+Explica con tus propias palabras y de forma clara, aunque te bases solo en este contexto:\n\n${context}`,
+    timestamp: Date.now(),
+  },
+  ...session.messages,
+];
+
+  // Generar respuesta del asistente
   const respuesta = await generateAIResponse(finalMessages);
   session.messages.push({ role: "assistant", content: respuesta, timestamp: Date.now() });
 
-  res.json({ textResponse: respuesta, contextFound: !!context?.trim() });
+  res.json({ textResponse: respuesta, contextFound: true });
 });
 
 // ---------------- Endpoint /history ----------------

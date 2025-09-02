@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
-// 👇 Importar RAG sin extensión .js
+// 👇 Importar RAG sin extensión
 import { loadKnowledge, retrieveContext } from "./rag.js";
 const app = express();
 app.use(cors());

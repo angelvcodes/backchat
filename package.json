@@ -5,10 +5,9 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-   
     "build": "tsc",
     "start": "node dist/server.js",
-     "dev": "ts-node --esm src/server.ts"
+    "dev": "ts-node --esm src/server.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -2,6 +2,12 @@ import fs from "fs";
 import path from "path";
 import mammoth from "mammoth";
 import fetch from "node-fetch";
+import { fileURLToPath } from "url";
+// ----------------------
+// ESM-friendly __dirname
+// ----------------------
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 // Base de conocimiento en memoria
 let knowledgeBase = [];
 // ----------------------

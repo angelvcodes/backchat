@@ -47,11 +47,11 @@ interface EmbeddingResponse {
 }
 
 export async function getEmbedding(text: string): Promise<number[]> {
-  const res = await fetch("http://localhost:1234/v1/embeddings", {
+  const res = await fetch("http://10.0.0.17:1234/v1/embeddings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "text-embedding-nomic-embed-text-v1.5",
+      model: "text-embedding-granite-embedding-278m-multilingual",
       input: text,
     }),
   });
@@ -102,8 +102,9 @@ export async function loadKnowledge(): Promise<void> {
   console.log(`✅ Base de conocimiento cargada con ${knowledgeBase.length} chunks`);
 }
 
+
 // ----------------------
-// 6. Recuperar contexto
+// 6. Recuperar contexto con threshold configurable y logging
 // ----------------------
 export async function retrieveContext(question: string): Promise<string> {
   if (!knowledgeBase.length) return "";
@@ -115,8 +116,28 @@ export async function retrieveContext(question: string): Promise<string> {
       text: chunk.text,
       score: cosineSimilarity(qEmbedding, chunk.embedding),
     }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+    .sort((a, b) => b.score - a.score);
 
-  return ranked.map((r) => r.text).join("\n\n");
+  // ✅ Threshold configurable por env, default 0.4
+  const THRESHOLD = parseFloat(process.env.SIM_THRESHOLD || "0.5");
+
+  console.log(`\n🔎 Resultados de similitud para: "${question}" (threshold=${THRESHOLD})`);
+  ranked.slice(0, 5).forEach((r, i) => {
+    console.log(`   #${i + 1} → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(0, 80)}...`);
+  });
+
+  // Filtrar por umbral
+  const relevant = ranked.filter(r => r.score >= THRESHOLD).slice(0, 3);
+
+  if (relevant.length === 0) {
+    console.log("⚠️ No se encontró contexto relevante (todos debajo del threshold).");
+    return "";
+  }
+
+  console.log(`📌 Contexto seleccionado (${relevant.length} chunks sobre threshold):`);
+  relevant.forEach(r =>
+    console.log(`   → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(0, 80)}...`)
+  );
+
+  return relevant.map(r => r.text).join("\n\n");
 }

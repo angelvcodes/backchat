@@ -4,7 +4,9 @@ import fetch from "node-fetch";
 import type { Request, Response } from "express";
 
 // 👇 Importar RAG sin extensión
-import { loadKnowledge, retrieveContext } from "./rag.ts";
+import { loadKnowledge } from "./rag.ts";
+import { retrieveContext } from "./retrieveContext.ts";
+
 
 const app = express();
 app.use(cors());
@@ -29,14 +31,14 @@ const SESSION_EXPIRATION = 30 * 60 * 1000; // 30 min
 setInterval(() => {
   const now = Date.now();
   for (const id in sessions) {
-  const session = sessions[id];
-  if (!session) continue; // ✅ evita undefined
+    const session = sessions[id];
+    if (!session) continue; // ✅ evita undefined
 
-  if (Date.now() - session.lastActive > SESSION_EXPIRATION) {
-    console.log(`🗑️ Sesión ${id} eliminada por inactividad`);
-    delete sessions[id];
+    if (Date.now() - session.lastActive > SESSION_EXPIRATION) {
+      console.log(`🗑️ Sesión ${id} eliminada por inactividad`);
+      delete sessions[id];
+    }
   }
-}
 }, 5 * 60 * 1000);
 
 // ---------------- Respuesta IA ----------------
@@ -49,7 +51,6 @@ interface LMResponse {
 
 function isLMResponse(data: any): data is LMResponse {
   return Array.isArray(data?.choices) && data.choices.every((c: LMChoice) => !!c?.message?.content);
-
 }
 
 async function generateAIResponse(messages: ChatMessage[]): Promise<string> {
@@ -61,7 +62,7 @@ async function generateAIResponse(messages: ChatMessage[]): Promise<string> {
         model: "llama-3.1-8b-ultralong-1m-instruct",
         messages: messages.map(m => ({ role: m.role, content: m.content })),
         max_tokens: 200,
-        temperature: 0.7,
+        temperature: 0.2, // 🔽 menos creativo => menos invenciones
         stream: false,
       }),
     });
@@ -73,6 +74,125 @@ async function generateAIResponse(messages: ChatMessage[]): Promise<string> {
     console.error(err);
     return "⚠️ Error al conectar con el modelo de IA.";
   }
+}
+
+// ---------------- Utils de embeddings/validación ----------------
+const SIM_ACCEPT = 0.70; // ✅ 0.729 pasará
+const SIM_BLOCK  = 0.60; // ❌ por debajo, bloqueamos
+
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
+  const dot = vecA.reduce((sum, a, i) => sum + a * (vecB[i] || 0), 0);
+  const normA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
+  const normB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
+  const denom = normA * normB || 1e-9;
+  return dot / denom;
+}
+
+async function getEmbedding(text: string): Promise<number[]> {
+  try {
+    const resp = await fetch("http://10.0.0.17:1234/v1/embeddings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "nomic-embed-text",
+        input: text,
+      }),
+    });
+    const data: any = await resp.json();
+    return data?.data?.[0]?.embedding ?? [];
+  } catch (err) {
+    console.error("❌ Error obteniendo embedding:", err);
+    return [];
+  }
+}
+
+function splitContextChunks(context: string): string[] {
+  // asume que tu retrieveContext une chunks con \n\n
+  return context
+    .split(/\n{2,}/g)
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+    .slice(0, 6); // límite defensivo
+}
+
+// --- Fallback léxico si embeddings fallan ---
+function normalizeText(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // quita acentos
+    .replace(/[^a-z0-9áéíóúüñ\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function tokenSet(s: string): Set<string> {
+  const stop = new Set(["la","el","los","las","de","del","y","o","u","a","en","con","para","por","un","una","que","se","es","al","lo"]);
+  const toks = normalizeText(s).split(" ").filter(w => w && !stop.has(w) && w.length > 2);
+  return new Set(toks);
+}
+function jaccard(a: Set<string>, b: Set<string>): number {
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  const union = a.size + b.size - inter || 1;
+  return inter / union;
+}
+
+// ---------------- Validación híbrida (embeddings + léxico) ----------------
+async function validateResponseHybrid(respuesta: string, context: string): Promise<string> {
+  const cleanResp = respuesta.trim();
+  const cleanCtx  = context.trim();
+
+  // Si ya viene el aviso, respetamos
+  if (cleanResp.toLowerCase().includes("⚠️ no hay información relevante")) {
+    return respuesta;
+  }
+
+  // Si no hay contexto, bloqueamos
+  if (!cleanCtx) {
+    return "⚠️ No hay información relevante en la base de conocimiento.";
+  }
+
+  // Embeddings por chunk
+  const chunks = splitContextChunks(cleanCtx);
+  try {
+    const respEmb = await getEmbedding(cleanResp);
+    if (respEmb.length) {
+      const chunkEmbs = await Promise.all(chunks.map(getEmbedding));
+      let maxSim = -1;
+      let bestIdx = -1;
+      chunkEmbs.forEach((emb, i) => {
+        if (!emb.length) return;
+        const s = cosineSimilarity(respEmb, emb);
+        if (s > maxSim) { maxSim = s; bestIdx = i; }
+      });
+
+      console.log(`📊 Similitud máx respuesta↔chunk: ${maxSim.toFixed(3)} (chunk #${bestIdx + 1})`);
+
+      // Reglas suaves
+      if (maxSim >= SIM_ACCEPT) {
+        return respuesta; // ✅ pasa
+      }
+      if (maxSim < SIM_BLOCK) {
+        return "⚠️ No hay información relevante en la base de conocimiento.";
+      }
+
+      // Zona gris: permitimos pero marcamos baja confianza (opcional)
+      // Puedes comentar la siguiente línea si no quieres prefijo de advertencia:
+      return `ℹ️ (Confianza media, similitud ${maxSim.toFixed(3)})\n${respuesta}`;
+    }
+  } catch (err) {
+    console.error("❌ Error en validación con embeddings:", err);
+    // caemos al fallback léxico
+  }
+
+  // Fallback léxico (si embeddings fallan)
+  const respSet = tokenSet(cleanResp);
+  const scores = chunks.map(ch => jaccard(respSet, tokenSet(ch)));
+  const best = Math.max(...scores, 0);
+  console.log(`🧩 (Fallback) Jaccard máx respuesta↔chunk: ${best.toFixed(3)}`);
+
+  if (best >= 0.20) return respuesta;                 // aceptamos
+  if (best < 0.12) return "⚠️ No hay información relevante en la base de conocimiento.";
+  return `ℹ️ (Confianza media)\n${respuesta}`;        // zona gris
 }
 
 // ---------------- Endpoint /chat ----------------
@@ -107,23 +227,30 @@ app.post("/chat", async (req: Request, res: Response) => {
   }
 
   // Preparar mensajes para el modelo solo con contexto válido
- const finalMessages: ChatMessage[] = [
-  {
-    role: "system",
-    content: `Responde SOLO usando la información del siguiente contexto. 
-Si el usuario pregunta algo fuera del contexto, responde con "⚠️ No hay información relevante en la base de conocimiento.". 
-No inventes información. 
-Explica con tus propias palabras y de forma clara, aunque te bases solo en este contexto:\n\n${context}`,
-    timestamp: Date.now(),
-  },
-  ...session.messages,
-];
+  const finalMessages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `Responde SOLO usando la información del siguiente contexto. 
+Si la pregunta del usuario no está cubierta en el contexto, responde exactamente con: 
+"⚠️ No hay información relevante en la base de conocimiento." 
+No intentes inventar información ni completar con conocimiento general.
+
+Contexto disponible:
+${context}`,
+      timestamp: Date.now(),
+    },
+    ...session.messages,
+  ];
 
   // Generar respuesta del asistente
-  const respuesta = await generateAIResponse(finalMessages);
-  session.messages.push({ role: "assistant", content: respuesta, timestamp: Date.now() });
+  let respuesta = await generateAIResponse(finalMessages);
 
-  res.json({ textResponse: respuesta, contextFound: true });
+  // ✅ Validación post-respuesta (híbrida)
+  respuesta = await validateResponseHybrid(respuesta, context);
+
+  // Guardar y enviar respuesta final
+  session.messages.push({ role: "assistant", content: respuesta, timestamp: Date.now() });
+  res.json({ textResponse: respuesta, contextFound: !respuesta.includes("⚠️") });
 });
 
 // ---------------- Endpoint /history ----------------

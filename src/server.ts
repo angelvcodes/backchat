@@ -4,7 +4,13 @@ import fetch from "node-fetch";
 import type { Request, Response } from "express";
 
 // 👇 Importar RAG sin extensión
-import { loadKnowledge, retrieveContext } from "./rag.ts";
+import {
+  loadKnowledge,
+  retrieveContext,
+  getEmbedding,
+  cosineSimilarity,
+  knowledgeBase,
+} from "./rag.ts";
 
 const app = express();
 app.use(cors());
@@ -29,14 +35,14 @@ const SESSION_EXPIRATION = 30 * 60 * 1000; // 30 min
 setInterval(() => {
   const now = Date.now();
   for (const id in sessions) {
-  const session = sessions[id];
-  if (!session) continue; // ✅ evita undefined
+    const session = sessions[id];
+    if (!session) continue; // ✅ evita undefined
 
-  if (Date.now() - session.lastActive > SESSION_EXPIRATION) {
-    console.log(`🗑️ Sesión ${id} eliminada por inactividad`);
-    delete sessions[id];
+    if (Date.now() - session.lastActive > SESSION_EXPIRATION) {
+      console.log(`🗑️ Sesión ${id} eliminada por inactividad`);
+      delete sessions[id];
+    }
   }
-}
 }, 5 * 60 * 1000);
 
 // ---------------- Respuesta IA ----------------
@@ -48,23 +54,28 @@ interface LMResponse {
 }
 
 function isLMResponse(data: any): data is LMResponse {
-  return Array.isArray(data?.choices) && data.choices.every((c: LMChoice) => !!c?.message?.content);
-
+  return (
+    Array.isArray(data?.choices) &&
+    data.choices.every((c: LMChoice) => !!c?.message?.content)
+  );
 }
 
 async function generateAIResponse(messages: ChatMessage[]): Promise<string> {
   try {
-    const lmResponse = await fetch("http://10.0.0.17:1234/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "llama-3.1-8b-ultralong-1m-instruct",
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-        max_tokens: 200,
-        temperature: 0.7,
-        stream: false,
-      }),
-    });
+    const lmResponse = await fetch(
+      "http://10.0.0.17:1234/v1/chat/completions",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-ultralong-1m-instruct",
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          max_tokens: 200,
+          temperature: 0.7,
+          stream: false,
+        }),
+      }
+    );
 
     const raw = await lmResponse.json();
     if (!isLMResponse(raw)) return "⚠️ Respuesta inesperada del modelo.";
@@ -75,58 +86,105 @@ async function generateAIResponse(messages: ChatMessage[]): Promise<string> {
   }
 }
 
-// ---------------- Endpoint /chat ----------------
+// ---------------- Endpoint /chat mejorado ----------------
 app.post("/chat", async (req: Request, res: Response) => {
   const { sessionId, message } = req.body;
-  if (!sessionId || !message) return res.status(400).json({ error: "Falta sessionId o mensaje" });
+  if (!sessionId || !message)
+    return res.status(400).json({ error: "Falta sessionId o mensaje" });
 
-  // Inicializar sesión si no existe
-  if (!sessions[sessionId]) sessions[sessionId] = { messages: [], lastActive: Date.now() };
+  // ------------------ Manejo de sesión ------------------
+  if (!sessions[sessionId])
+    sessions[sessionId] = { messages: [], lastActive: Date.now() };
   const session = sessions[sessionId];
   session.lastActive = Date.now();
 
-  // Guardar mensaje del usuario
-  session.messages.push({ role: "user", content: message, timestamp: Date.now() });
-
-  // 📝 Imprimir historial completo de la sesión
-  console.log(`\n💬 Historial de sesión ${sessionId}:`);
-  session.messages.forEach((msg, index) => {
-    const time = new Date(msg.timestamp).toLocaleTimeString();
-    console.log(`[${sessionId}] [${index + 1}] [${time}] ${msg.role.toUpperCase()}: ${msg.content}`);
+  session.messages.push({
+    role: "user",
+    content: message,
+    timestamp: Date.now(),
   });
 
-  // 🔑 Recuperar contexto del documento
-  const context = await retrieveContext(message);
+  // ------------------ Recuperar contexto ------------------
+  const context = await retrieveContext(message, 2, 5, 0.65); 
+  // topN=2, minWords=5, minScore=0.65
 
-  // ❌ Si no hay contexto relevante, no responder
-  if (!context?.trim()) {
+  // ------------------ Calcular topScore global ------------------
+  const qEmbedding = await getEmbedding(message);
+  const topScore =
+    knowledgeBase
+      .map((c) => cosineSimilarity(qEmbedding, c.embedding))
+      .sort((a, b) => b - a)[0] ?? 0;
+
+  const STRICT_THRESHOLD = 0.7;
+
+  // ------------------ Manejo de excepción si no hay contexto suficiente ------------------
+  if (!context?.trim() || topScore < STRICT_THRESHOLD) {
+    const warningMessage =
+      "⚠️ Lo siento, no tengo información relevante en la base de conocimiento para esa pregunta.";
+
+    session.messages.push({
+      role: "assistant",
+      content: warningMessage,
+      timestamp: Date.now(),
+    });
+
     return res.json({
-      textResponse: "⚠️ Lo siento, no tengo información en la base de conocimiento. Es posible que tu pregunta no esté redactada de la mejor forma; intenta hacerla más precisa, breve y clara.",
+      textResponse: warningMessage,
       contextFound: false,
     });
   }
 
-  // Preparar mensajes para el modelo solo con contexto válido
- const finalMessages: ChatMessage[] = [
-  {
-    role: "system",
-    content: `Responde SOLO usando la información del siguiente contexto. 
-Si la pregunta del usuario no está cubierta en el contexto, responde exactamente con: 
-"⚠️ No hay información relevante en la base de conocimiento." 
-No intentes inventar información ni completar con conocimiento general.
+  // ------------------ Preparar prompt para LLM ------------------
+  const systemPrompt = `Responde SOLO usando la información del siguiente contexto. 
+Si la pregunta del usuario no está cubierta en el contexto, responde exactamente:
+"⚠️ No hay información relevante en la base de conocimiento."
+No inventes información ni completes con conocimiento general.
 
 Contexto disponible:
-${context}`,
-    timestamp: Date.now(),
-  },
-  ...session.messages,
-];
+${context}
 
-  // Generar respuesta del asistente
+Ejemplo:
+Pregunta: ¿Quién es el alcalde de otra ciudad?
+Respuesta: ⚠️ No hay información relevante en la base de conocimiento.
+`;
+
+  // ------------------ Enviar al LLM solo el último mensaje ------------------
+  const lastMessages = session.messages.slice(-1);
+  const finalMessages: ChatMessage[] = [
+    { role: "system", content: systemPrompt, timestamp: Date.now() },
+    ...lastMessages,
+  ];
+
   const respuesta = await generateAIResponse(finalMessages);
-  session.messages.push({ role: "assistant", content: respuesta, timestamp: Date.now() });
 
-  res.json({ textResponse: respuesta, contextFound: true });
+  // Guardar respuesta del asistente
+  session.messages.push({
+    role: "assistant",
+    content: respuesta,
+    timestamp: Date.now(),
+  });
+
+  // ------------------ Logging de chunks más relevantes ------------------
+  const ranked = knowledgeBase
+    .map((chunk) => ({
+      text: chunk.text,
+      score: cosineSimilarity(qEmbedding, chunk.embedding),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  console.log("\n🏷️ Scores de contexto recuperado:");
+  ranked
+    .slice(0, 3)
+    .forEach((r, i) =>
+      console.log(
+        `   #${i + 1} → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(
+          0,
+          80
+        )}...`
+      )
+    );
+
+  return res.json({ textResponse: respuesta, contextFound: true });
 });
 
 // ---------------- Endpoint /history ----------------

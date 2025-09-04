@@ -17,7 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Base de conocimiento en memoria
-let knowledgeBase: Chunk[] = [];
+export let knowledgeBase: Chunk[] = [];
 
 // ----------------------
 // 1. Leer archivo Word con Mammoth
@@ -34,9 +34,9 @@ export async function loadWordFile(filePath: string): Promise<string> {
 // Cada FAQ debe estar delimitado en el documento con ===
 function chunkFAQs(text: string): string[] {
   return text
-    .split(/\n===.*?===\n/g)       
-    .map((c) => c.trim())  
-    .filter(Boolean);      
+    .split(/\n===.*?===\n/g)
+    .map((c) => c.trim())
+    .filter(Boolean);
 }
 
 // ----------------------
@@ -66,7 +66,7 @@ export async function getEmbedding(text: string): Promise<number[]> {
 // ----------------------
 // 4. Similitud coseno segura
 // ----------------------
-function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: number[], b: number[]): number {
   const length = Math.min(a.length, b.length);
   if (length === 0) return 0;
 
@@ -93,7 +93,9 @@ export async function loadKnowledge(): Promise<void> {
   // Si ya existe cache, cargarlo
   if (fs.existsSync(cachePath)) {
     knowledgeBase = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
-    console.log(`✅ Base de conocimiento cargada desde cache con ${knowledgeBase.length} chunks`);
+    console.log(
+      `✅ Base de conocimiento cargada desde cache con ${knowledgeBase.length} chunks`
+    );
     return;
   }
 
@@ -118,17 +120,25 @@ export async function loadKnowledge(): Promise<void> {
 
   // Guardar en cache
   fs.writeFileSync(cachePath, JSON.stringify(knowledgeBase, null, 2));
-  console.log(`✅ Base de conocimiento creada y guardada con ${knowledgeBase.length} chunks`);
+  console.log(
+    `✅ Base de conocimiento creada y guardada con ${knowledgeBase.length} chunks`
+  );
 }
 
 // ----------------------
-// 6. Recuperar contexto con threshold configurable y logging
+// 6. Recuperar contexto mejorado
 // ----------------------
-export async function retrieveContext(question: string): Promise<string> {
-  if (!knowledgeBase.length) return "";
+export async function retrieveContext(
+  question: string,
+  topN: number = 2,
+  minWords: number = 5,
+  minScore: number = 0.65
+): Promise<string | null> {
+  if (!knowledgeBase.length) return null;
 
   const qEmbedding = await getEmbedding(question);
 
+  // Calcular similitud con todos los chunks
   const ranked = knowledgeBase
     .map((chunk) => ({
       text: chunk.text,
@@ -136,26 +146,37 @@ export async function retrieveContext(question: string): Promise<string> {
     }))
     .sort((a, b) => b.score - a.score);
 
-  // ✅ Threshold configurable
-  const THRESHOLD = parseFloat("0.7");
-
-  console.log(`\n🔎 Resultados de similitud para: "${question}" (threshold=${THRESHOLD})`);
-  ranked.slice(0, 3).forEach((r, i) => {
-    console.log(`   #${i + 1} → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(0, 80)}...`);
+  // Mostrar top 5 resultados para depuración
+  console.log(`\n🔎 Resultados de similitud para: "${question}"`);
+  ranked.slice(0, 5).forEach((r, i) => {
+    console.log(
+      `   #${i + 1} → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(
+        0,
+        80
+      )}...`
+    );
   });
 
-  // Filtrar por umbral
-  const relevant = ranked.filter((r) => r.score >= THRESHOLD).slice(0, 2);
+  // Filtrar chunks relevantes por umbral y longitud mínima
+  const relevant = ranked
+    .filter((r) => r.score >= minScore && r.text.split(" ").length >= minWords)
+    .slice(0, topN);
 
+  // Si no hay resultados suficientemente relevantes
   if (relevant.length === 0) {
-    console.log("⚠️ No se encontró contexto relevante (todos debajo del threshold).");
-    return "";
+    console.log("⚠️ No se encontró contexto relevante para esta pregunta.");
+    return null; // Devuelve null para indicar ausencia de contexto
   }
 
-  console.log(`📌 Contexto seleccionado (${relevant.length} chunks sobre threshold):`);
+  console.log(
+    `📌 Contexto seleccionado (${relevant.length} chunks sobre threshold ${minScore} y minWords ${minWords}):`
+  );
   relevant.forEach((r) =>
-    console.log(`   → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(0, 80)}...`)
+    console.log(
+      `   → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(0, 80)}...`
+    )
   );
 
+  // Devolver texto concatenado de los chunks relevantes
   return relevant.map((r) => r.text).join("\n\n");
 }

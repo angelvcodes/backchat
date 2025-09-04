@@ -17,7 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Base de conocimiento en memoria
-export let knowledgeBase: Chunk[] = [];
+let knowledgeBase: Chunk[] = [];
 
 // ----------------------
 // 1. Leer archivo Word con Mammoth
@@ -66,7 +66,7 @@ export async function getEmbedding(text: string): Promise<number[]> {
 // ----------------------
 // 4. Similitud coseno segura
 // ----------------------
-export function cosineSimilarity(a: number[], b: number[]): number {
+function cosineSimilarity(a: number[], b: number[]): number {
   const length = Math.min(a.length, b.length);
   if (length === 0) return 0;
 
@@ -140,7 +140,7 @@ export async function retrieveContext(question: string): Promise<string> {
   const THRESHOLD = parseFloat("0.7");
 
   console.log(`\n🔎 Resultados de similitud para: "${question}" (threshold=${THRESHOLD})`);
-  ranked.slice(0, 5).forEach((r, i) => {
+  ranked.slice(0, 3).forEach((r, i) => {
     console.log(`   #${i + 1} → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(0, 80)}...`);
   });
 

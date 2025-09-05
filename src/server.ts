@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
 import type { Request, Response } from "express";
+import { saveUnansweredMessage } from "./rag.ts";
+
 
 // 👇 Importar RAG sin extensión
 import {
@@ -110,17 +112,25 @@ app.post("/chat", async (req: Request, res: Response) => {
 
   // ------------------ Calcular topScore global ------------------
   const qEmbedding = await getEmbedding(message);
-  const topScore =
+  let topScore = 0;
+
+if (qEmbedding) {
+  topScore =
     knowledgeBase
       .map((c) => cosineSimilarity(qEmbedding, c.embedding))
       .sort((a, b) => b - a)[0] ?? 0;
+} else {
+  console.warn(`⚠️ No se pudo generar embedding para la pregunta: "${message}"`);
+}
 
   const STRICT_THRESHOLD = 0.7;
 
   // ------------------ Manejo de excepción si no hay contexto suficiente ------------------
   if (!context?.trim() || topScore < STRICT_THRESHOLD) {
     const warningMessage =
-      "⚠️ Lo siento, no tengo información relevante en la base de conocimiento para esa pregunta.";
+      "⚠️ Aun estoy aprendiendo y no tengo la respuesta, pero la guardaré para que los responsables la revisen pronto.";
+
+      saveUnansweredMessage(sessionId, message, context ? [context] : [], topScore);
 
     session.messages.push({
       role: "assistant",
@@ -165,14 +175,18 @@ Respuesta: ⚠️ No hay información relevante en la base de conocimiento.
   });
 
   // ------------------ Logging de chunks más relevantes ------------------
-  const ranked = knowledgeBase
+  let ranked: { text: string; score: number }[] = [];
+
+if (qEmbedding) {
+  ranked = knowledgeBase
     .map((chunk) => ({
       text: chunk.text,
       score: cosineSimilarity(qEmbedding, chunk.embedding),
     }))
     .sort((a, b) => b.score - a.score);
-
-  console.log("\n🏷️ Scores de contexto recuperado:");
+} else {
+  console.warn("⚠️ No se pudo generar embedding para la pregunta, no se calcularán scores.");
+}
   ranked
     .slice(0, 3)
     .forEach((r, i) =>
@@ -198,5 +212,6 @@ app.get("/history/:sessionId", (req, res) => {
 const PORT = 3001;
 app.listen(PORT, async () => {
   console.log(`🚀 Backend listo en http://localhost:${PORT}`);
+  //arranca la funcion para crear los chucks
   await loadKnowledge();
 });

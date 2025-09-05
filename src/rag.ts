@@ -42,25 +42,75 @@ function chunkFAQs(text: string): string[] {
 // ----------------------
 // 3. Generar embeddings
 // ----------------------
+
 interface EmbeddingResponse {
-  data: { embedding: number[] }[];
+  object: string;
+  data: { embedding: number[]; index: number }[];
+  model?: string;
+  usage?: { prompt_tokens: number; total_tokens: number };
 }
 
-export async function getEmbedding(text: string): Promise<number[]> {
-  const res = await fetch("http://10.0.0.17:1234/v1/embeddings", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "text-embedding-granite-embedding-278m-multilingual",
-      input: text,
-    }),
-  });
+export async function getEmbedding(text: string, i?: number): Promise<number[] | null> {
+  try {
+    // 1. Limpiar texto
+    let cleanText = text
+      .replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\uFFFF]/g, "") // quita caracteres raros
+      .trim();
 
-  const data = (await res.json()) as EmbeddingResponse;
-  if (!data?.data?.[0]?.embedding) {
-    throw new Error("No se recibió embedding válido del modelo.");
+    // 2. Ignorar chunks vacíos
+    if (!cleanText || cleanText.length < 5) {
+      console.warn(
+        `⚠️ Chunk ${i !== undefined ? "#" + (i + 1) : ""} omitido: texto vacío o demasiado corto`
+      );
+      return null;
+    }
+
+    // 3. Recortar texto si es muy largo
+    const MAX_CHARS = 4000; // ajusta según el modelo
+    if (cleanText.length > MAX_CHARS) {
+      console.warn(
+        `⚠️ Chunk ${i !== undefined ? "#" + (i + 1) : ""} recortado: longitud ${cleanText.length} → ${MAX_CHARS}`
+      );
+      cleanText = cleanText.slice(0, MAX_CHARS);
+    }
+
+    // 4. Llamar al servidor de embeddings
+    const response = await fetch("http://10.0.0.17:1234/v1/embeddings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "text-embedding-granite-embedding-278m-multilingual",
+        input: cleanText,
+      }),
+    });
+
+    // 5. Manejo de error HTTP
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(
+        `❌ Error HTTP ${response.status} al pedir embedding para chunk ${i !== undefined ? "#" + (i + 1) : ""} (longitud=${cleanText.length}):`,
+        errorText
+      );
+      return null;
+    }
+
+    const data = (await response.json()) as EmbeddingResponse;
+
+    if (!data?.data?.[0]?.embedding) {
+      console.warn(
+        `⚠️ No se recibió embedding válido para chunk ${i !== undefined ? "#" + (i + 1) : ""}: "${cleanText.slice(0, 80)}..."`
+      );
+      return null;
+    }
+
+    return data.data[0].embedding;
+  } catch (err) {
+    console.error(
+      `❌ Error inesperado en getEmbedding para chunk ${i !== undefined ? "#" + (i + 1) : ""}: "${text.slice(0, 80)}..."`,
+      err
+    );
+    return null;
   }
-  return data.data[0].embedding;
 }
 
 // ----------------------
@@ -83,12 +133,11 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   const denominator = Math.sqrt(magA) * Math.sqrt(magB);
   return denominator === 0 ? 0 : dot / denominator;
 }
-
 // ----------------------
 // 5. Cargar base en memoria con cache
 // ----------------------
 export async function loadKnowledge(): Promise<void> {
-  const cachePath = path.join(__dirname, "knowledgeBase.json");
+  const cachePath = path.join(__dirname, "BaseDeConocimiento.json");
 
   // Si ya existe cache, cargarlo
   if (fs.existsSync(cachePath)) {
@@ -104,18 +153,17 @@ export async function loadKnowledge(): Promise<void> {
   const text = await loadWordFile(filePath);
   const chunks = chunkFAQs(text); // ✅ usamos FAQs en lugar de corte por palabras
 
-  knowledgeBase = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i]!;
-    try {
-      const embedding = await getEmbedding(chunk);
-      knowledgeBase.push({ text: chunk, embedding, id: i });
-    } catch (err) {
-      console.error("❌ Error generando embedding para chunk:", err);
+   knowledgeBase = [];
+  for (const [i, chunk] of chunks.entries()) {
+    const embedding = await getEmbedding(chunk); // ✅ chunk es string
+    if (!embedding) {
+      console.warn(
+        `⚠️ Chunk #${i + 1} omitido (sin embedding): "${chunk.slice(0, 80)}..."`
+      );
+      continue;
     }
-
-    // ⚠️ Evita saturar el modelo (espera 200ms entre requests)
-    await new Promise((res) => setTimeout(res, 200));
+    // ✅ construimos el objeto correctamente
+    knowledgeBase.push({ text: chunk, embedding });
   }
 
   // Guardar en cache
@@ -137,6 +185,10 @@ export async function retrieveContext(
   if (!knowledgeBase.length) return null;
 
   const qEmbedding = await getEmbedding(question);
+  if (!qEmbedding) {
+    console.warn("⚠️ No se pudo generar embedding para la pregunta.");
+    return null;
+  }
 
   // Calcular similitud con todos los chunks
   const ranked = knowledgeBase
@@ -150,22 +202,18 @@ export async function retrieveContext(
   console.log(`\n🔎 Resultados de similitud para: "${question}"`);
   ranked.slice(0, 5).forEach((r, i) => {
     console.log(
-      `   #${i + 1} → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(
-        0,
-        80
-      )}...`
+      `   #${i + 1} → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(0, 80)}...`
     );
   });
 
-  // Filtrar chunks relevantes por umbral y longitud mínima
+  // Filtrar chunks relevantes
   const relevant = ranked
     .filter((r) => r.score >= minScore && r.text.split(" ").length >= minWords)
     .slice(0, topN);
 
-  // Si no hay resultados suficientemente relevantes
   if (relevant.length === 0) {
     console.log("⚠️ No se encontró contexto relevante para esta pregunta.");
-    return null; // Devuelve null para indicar ausencia de contexto
+    return null;
   }
 
   console.log(
@@ -177,6 +225,49 @@ export async function retrieveContext(
     )
   );
 
-  // Devolver texto concatenado de los chunks relevantes
   return relevant.map((r) => r.text).join("\n\n");
+}
+
+// ----------------------
+// 7. Guardar preguntas sin respueta
+// -----------------
+
+const unansweredPath = path.join(__dirname, "new_questions.json");
+
+interface UnansweredEntry {
+  message: string;
+  timestamp: number;
+  context: string[];
+  topScore: number;
+}
+
+// ------------------ Guardar mensaje no respondido con contexto parcial ------------------
+export function saveUnansweredMessage(
+  sessionId: string,
+  userMessage: string,
+  contextFragments: string[],
+  topScore: number
+) {
+  let data: Record<string, UnansweredEntry[]> = {};
+
+  if (fs.existsSync(unansweredPath)) {
+    try {
+      const raw = fs.readFileSync(unansweredPath, "utf-8");
+      data = JSON.parse(raw);
+    } catch {
+      data = {};
+    }
+  }
+
+  if (!data[sessionId]) data[sessionId] = [];
+
+  data[sessionId].push({
+    message: userMessage,
+    timestamp: Date.now(),
+    context: contextFragments,
+    topScore,
+  });
+
+  fs.writeFileSync(unansweredPath, JSON.stringify(data, null, 2), "utf-8");
+  console.log(`💾 Mensaje no respondido guardado para session ${sessionId}`);
 }

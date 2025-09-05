@@ -1,0 +1,32 @@
+{
+  "58b04953-b670-418c-a5d5-dd787e071d55": [
+    {
+      "message": "Porque el cielo es azul",
+      "timestamp": 1757100000424,
+      "context": [],
+      "topScore": 0.5087137023134464
+    },
+    {
+      "message": "necesito liquidar mi predial",
+      "timestamp": 1757100102165,
+      "context": [
+        "Categoría: Secretaría de Hacienda – Impuesto de Vehículos Públicos\n\nTags: [vehículos, impuestos, documentos, liquidación]\n\n\n\nPregunta: ¿Qué documentos necesito para liquidar el impuesto de vehículos públicos?\n\nRespuesta: Placa del vehículo, cédula del propietario y tarjeta de propiedad.\n\nCategoría: Rentas e Impuestos\n\nTags: [paz y salvo, trámites, impuestos prediales]\n\n\n\nPregunta: ¿Qué debo hacer si necesito sacar varios paz y salvo a la vez?\n\nRespuesta: Debes estar al día con el 100% del impuesto predial. Luego acude al CACY y solicita un turno por cada paz y salvo requerido."
+      ],
+      "topScore": 0.6992778554569885
+    },
+    {
+      "message": "quien desarrollo este bot",
+      "timestamp": 1757111150918,
+      "context": [],
+      "topScore": 0.5772938230931718
+    }
+  ],
+  "b6a84ca8-dddc-4380-8a3a-cb6784fe2f1d": [
+    {
+      "message": "porque el fuego quema?",
+      "timestamp": 1757100035829,
+      "context": [],
+      "topScore": 0.5412275664688855
+    }
+  ]
+}

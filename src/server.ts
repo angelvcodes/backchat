@@ -3,9 +3,10 @@ import cors from "cors";
 import fetch from "node-fetch";
 import type { Request, Response } from "express";
 import { saveUnansweredMessage } from "./rag.ts";
+import { isGreeting } from "./rag.ts";
 
 
-// 👇 Importar RAG sin extensión
+// Importar RAG sin extensión
 import {
   loadKnowledge,
   retrieveContext,
@@ -38,7 +39,7 @@ setInterval(() => {
   const now = Date.now();
   for (const id in sessions) {
     const session = sessions[id];
-    if (!session) continue; // ✅ evita undefined
+    if (!session) continue; 
 
     if (Date.now() - session.lastActive > SESSION_EXPIRATION) {
       console.log(`🗑️ Sesión ${id} eliminada por inactividad`);
@@ -88,7 +89,7 @@ async function generateAIResponse(messages: ChatMessage[]): Promise<string> {
   }
 }
 
-// ---------------- Endpoint /chat mejorado ----------------
+// ------------------ Endpoint /chat mejorado ------------------
 app.post("/chat", async (req: Request, res: Response) => {
   const { sessionId, message } = req.body;
   if (!sessionId || !message)
@@ -106,10 +107,20 @@ app.post("/chat", async (req: Request, res: Response) => {
     timestamp: Date.now(),
   });
 
-  // ------------------ Recuperar contexto ------------------
+  // ------------------ Detección de saludo ------------------
+  if (isGreeting(message)) {
+    const saludo = "👋 ¡Hola! ¿En qué puedo ayudarte hoy?";
+    session.messages.push({
+      role: "assistant",
+      content: saludo,
+      timestamp: Date.now(),
+    });
+    return res.json({ textResponse: saludo, contextFound: false });
+  }
+
+  // ------------------ Recuperar contexto (solo si no es saludo) ------------------
   const context = await retrieveContext(message, 2, 5, 0.65); 
   // topN=2, minWords=5, minScore=0.65
-
   // ------------------ Calcular topScore global ------------------
   const qEmbedding = await getEmbedding(message);
   let topScore = 0;
@@ -145,17 +156,18 @@ if (qEmbedding) {
   }
 
   // ------------------ Preparar prompt para LLM ------------------
-  const systemPrompt = `Responde SOLO usando la información del siguiente contexto. 
-Si la pregunta del usuario no está cubierta en el contexto, responde exactamente:
-"⚠️ No hay información relevante en la base de conocimiento."
-No inventes información ni completes con conocimiento general.
+const systemPrompt = `
+Eres un asistente virtual de la Alcaldía de Yopal.  
+Responde SOLO con la información del contexto.  
 
-Contexto disponible:
+Reglas:  
+- Si la pregunta no está cubierta, responde:
+  "⚠️ No hay información relevante en la base de conocimiento."  
+- No inventes información ni uses conocimiento externo.  
+- Reescribe las respuestas en un tono claro, cordial y natural, no la copies textualmente.
+---
+📚 Contexto:
 ${context}
-
-Ejemplo:
-Pregunta: ¿Quién es el alcalde de otra ciudad?
-Respuesta: ⚠️ No hay información relevante en la base de conocimiento.
 `;
 
   // ------------------ Enviar al LLM solo el último mensaje ------------------

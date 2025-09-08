@@ -1,236 +1,40 @@
 {
   "58b04953-b670-418c-a5d5-dd787e071d55": [
     {
-      "message": "Porque el cielo es azul",
-      "timestamp": 1757100000424,
+      "message": "Donde juega la seleccion colombia?",
+      "timestamp": 1757366799758,
       "context": [],
-      "topScore": 0.5087137023134464
+      "topScore": 0.6318726277824617
     },
     {
-      "message": "necesito liquidar mi predial",
-      "timestamp": 1757100102165,
-      "context": [
-        "Categoría: Secretaría de Hacienda – Impuesto de Vehículos Públicos\n\nTags: [vehículos, impuestos, documentos, liquidación]\n\n\n\nPregunta: ¿Qué documentos necesito para liquidar el impuesto de vehículos públicos?\n\nRespuesta: Placa del vehículo, cédula del propietario y tarjeta de propiedad.\n\nCategoría: Rentas e Impuestos\n\nTags: [paz y salvo, trámites, impuestos prediales]\n\n\n\nPregunta: ¿Qué debo hacer si necesito sacar varios paz y salvo a la vez?\n\nRespuesta: Debes estar al día con el 100% del impuesto predial. Luego acude al CACY y solicita un turno por cada paz y salvo requerido."
-      ],
-      "topScore": 0.6992778554569885
-    },
-    {
-      "message": "quien desarrollo este bot",
-      "timestamp": 1757111150918,
-      "context": [],
-      "topScore": 0.5772938230931718
-    },
-    {
-      "message": "quien te desarrollo?",
-      "timestamp": 1757335363093,
-      "context": [
-        "Categoría: Vivienda y Desarrollo\n\nTags: [indev, vivienda, desarrollo]\n\n\n\nPregunta: ¿Dónde queda el Indev en Yopal?\n\nRespuesta: En la Cra. 24 #10-39, Yopal.\n\nCategoría: Desarrollo económico\n\nTags: [ganadería, agricultura, desarrollo económico]\n\n\n\nPregunta: ¿Dónde está ubicada la Secretaría de Desarrollo Económico, Ganadería y Agricultura de Yopal?\n\nRespuesta: En la Carrera 21 #30-55, Yopal."
-      ],
-      "topScore": 0.6733711167066454
-    },
-    {
-      "message": "quiero colocar una queja a una eps, que tengo que hacer",
-      "timestamp": 1757336968005,
-      "context": [
-        "Categoría: Salud\n\nTags: [eps, traslado, cambio de municipio]\n\n\n\nPregunta: ¿Qué debo hacer si cambié de municipio y necesito trasladar mi EPS a Yopal?\n\nRespuesta: Existen dos formas:\n\n1. Portal Web del Ministerio de Salud:\n\n   - Ingresa a miseguridadsocial.gov.co\n\n   - Crea tu Usuario Ciudadano.\n\n   - Solicita el traslado en línea.\n\n2. EPS con sede en Yopal:\n\n   - Acude a Capresoca, Coosalud, Nueva EPS o Sanitas.\n\n   - Diligencia el formulario oficial de traslado.\n\nCategoría: Secretaría de Hacienda\n\nTags: [embargo, deudas, pagos]\n\n\n\nPregunta: ¿Qué debo hacer si me llega una solicitud de registro de embargo?\n\nRespuesta: Debe pagar las deudas referenciadas en el documento lo más pronto posible para evitar el embargo."
-      ],
-      "topScore": 0.6907089304198466
-    },
-    {
-      "message": "quiero colocar una queja a una eps",
-      "timestamp": 1757336989652,
-      "context": [
-        "Categoría: Salud\n\nTags: [eps, traslado, cambio de municipio]\n\n\n\nPregunta: ¿Qué debo hacer si cambié de municipio y necesito trasladar mi EPS a Yopal?\n\nRespuesta: Existen dos formas:\n\n1. Portal Web del Ministerio de Salud:\n\n   - Ingresa a miseguridadsocial.gov.co\n\n   - Crea tu Usuario Ciudadano.\n\n   - Solicita el traslado en línea.\n\n2. EPS con sede en Yopal:\n\n   - Acude a Capresoca, Coosalud, Nueva EPS o Sanitas.\n\n   - Diligencia el formulario oficial de traslado."
-      ],
-      "topScore": 0.660955020097198
-    },
-    {
-      "message": "como puedo presentar una queja de una eps",
-      "timestamp": 1757337199088,
-      "context": [
-        "Categoría: Secretaría de Planeación\n\nTags: [avalúo catastral, reclamos catastrales, catastro, revisión de avalúos]\n\n\n\nPregunta: ¿Dónde puedo presentar un reclamo por avalúo catastral en Yopal?\n\nRespuesta: Cualquier reclamo o solicitud de revisión sobre el avalúo catastral de propiedades en Yopal debe presentarse en la Secretaría de Planeación de la Alcaldía. Esta secretaría es responsable de la gestión catastral y de tramitar y resolver estas solicitudes.\n\nCategoría: Servicios Públicos\n\nTags: [solicitud, servicios públicos, trámite]\n\n\n\nPregunta: ¿Cómo se presenta la solicitud de certificación de servicios públicos en Yopal?\n\nRespuesta: Debe enviarse un oficio con los datos y documentos requeridos al correo institucional contactenos@yopal-casanare.gov.co\n\n."
-      ],
-      "topScore": 0.6651334154842472
-    },
-    {
-      "message": "Qué debo hacer si estoy en el Régimen Subsidiado y empiezo a trabajar para pasar al Contributivo",
-      "timestamp": 1757337330716,
-      "context": [
-        "Categoría: Salud\n\nTags: [afiliación, régimen subsidiado, EPS, sisbén]\n\n\n\nPregunta: ¿Cómo puedo afiliarme al Régimen Subsidiado de EPS en Yopal?\n\nRespuesta:\n\nOpciones de afiliación:\n\n- Directamente en una EPS habilitada en Yopal: Capresoca, Coosalud o Nueva EPS.\n\n- En la Oficina de Aseguramiento, de la Secretaría de Salud Municipal.\n\nRequisitos:\n\n- Documento de identificación válido.\n\n- Fechas de nacimiento y expedición comprobables.\n\n- Haber aplicado la encuesta SISBEN IV.\n\nCategoría: Secretaría de Hacienda\n\nTags: [embargo, levantamiento, pagos]\n\n\n\nPregunta: ¿Qué debo hacer para levantar un embargo?\n\nRespuesta: Pagar la totalidad de la deuda y radicar los soportes en el CACY."
-      ],
-      "topScore": 0.6820985861854563
-    },
-    {
-      "message": "porque el cielo es azul",
-      "timestamp": 1757341629980,
-      "context": [],
-      "topScore": 0.5071749905734655
-    },
-    {
-      "message": "dd",
-      "timestamp": 1757346325621,
+      "message": "a",
+      "timestamp": 1757368096811,
       "context": [],
       "topScore": 0
     },
     {
-      "message": "Hola",
-      "timestamp": 1757346384223,
+      "message": "dos",
+      "timestamp": 1757368627009,
       "context": [],
       "topScore": 0
     },
     {
-      "message": "hola",
-      "timestamp": 1757347029989,
+      "message": "dos",
+      "timestamp": 1757368996734,
       "context": [],
       "topScore": 0
     },
     {
-      "message": "hola",
-      "timestamp": 1757347035559,
+      "message": "dos",
+      "timestamp": 1757369030253,
       "context": [],
       "topScore": 0
     },
     {
-      "message": "Buenos dias",
-      "timestamp": 1757347041882,
-      "context": [],
-      "topScore": 0.5541443019982465
-    },
-    {
-      "message": "hola",
-      "timestamp": 1757347317958,
+      "message": "tres",
+      "timestamp": 1757369047782,
       "context": [],
       "topScore": 0
-    },
-    {
-      "message": "buenos dias ",
-      "timestamp": 1757347723058,
-      "context": [],
-      "topScore": 0.5630178688489367
-    },
-    {
-      "message": "hola buenos dias",
-      "timestamp": 1757347733863,
-      "context": [],
-      "topScore": 0.5847878267760812
-    },
-    {
-      "message": "Hola",
-      "timestamp": 1757348299326,
-      "context": [],
-      "topScore": 0
-    },
-    {
-      "message": "Buenos duas",
-      "timestamp": 1757348302995,
-      "context": [],
-      "topScore": 0.5843352114625007
-    },
-    {
-      "message": "Buenos dias, como estas",
-      "timestamp": 1757348310014,
-      "context": [],
-      "topScore": 0.5807475998841187
-    },
-    {
-      "message": "Hola",
-      "timestamp": 1757348559806,
-      "context": [],
-      "topScore": 0
-    },
-    {
-      "message": "Buenos dais",
-      "timestamp": 1757348582613,
-      "context": [],
-      "topScore": 0.5553272693286877
-    },
-    {
-      "message": "Hola buen dia",
-      "timestamp": 1757348597663,
-      "context": [],
-      "topScore": 0.5749860649694069
-    },
-    {
-      "message": "Hola",
-      "timestamp": 1757348611713,
-      "context": [],
-      "topScore": 0
-    },
-    {
-      "message": "hola",
-      "timestamp": 1757348614299,
-      "context": [],
-      "topScore": 0
-    },
-    {
-      "message": "holaa",
-      "timestamp": 1757348685242,
-      "context": [],
-      "topScore": 0.5874958868739844
-    },
-    {
-      "message": "que tal",
-      "timestamp": 1757348706136,
-      "context": [],
-      "topScore": 0.5863184347541217
-    },
-    {
-      "message": "Hola",
-      "timestamp": 1757348785588,
-      "context": [],
-      "topScore": 0
-    },
-    {
-      "message": "que tal",
-      "timestamp": 1757348788382,
-      "context": [],
-      "topScore": 0.5863184347541217
-    },
-    {
-      "message": "buenos dias",
-      "timestamp": 1757348792707,
-      "context": [],
-      "topScore": 0.5630178688489367
-    },
-    {
-      "message": "eyy",
-      "timestamp": 1757348948840,
-      "context": [],
-      "topScore": 0
-    },
-    {
-      "message": "hola, buenos dias",
-      "timestamp": 1757348960168,
-      "context": [],
-      "topScore": 0.5894914173043702
-    },
-    {
-      "message": "quien es el mejor empleado",
-      "timestamp": 1757349345042,
-      "context": [],
-      "topScore": 0.6159118907763295
-    },
-    {
-      "message": "como sacar el pasaporte",
-      "timestamp": 1757349523753,
-      "context": [
-        "Categoría: Movilidad\n\nTags: [certificado de movilidad, trámites, radicado]\n\nPregunta: ¿Cómo se tramita el certificado de movilidad en Yopal?\n\nRespuesta: Radica un oficio con tus datos en Correspondencia Externa de la Alcaldía. Recibirás un número de radicado para seguimiento.\n\nCategoría: Salud\n\nTags: [certificado sanitario vehicular, alimentos, transporte]\n\nPregunta: ¿Cómo consigo el certificado de transporte de alimentos para vehículos?\n\nRespuesta: Solicita el formato en la recepción de la Alcaldía, diligéncialo y radícalo con la tarjeta de propiedad del vehículo y tu cédula."
-      ],
-      "topScore": 0.6777711726957294
-    }
-  ],
-  "b6a84ca8-dddc-4380-8a3a-cb6784fe2f1d": [
-    {
-      "message": "porque el fuego quema?",
-      "timestamp": 1757100035829,
-      "context": [],
-      "topScore": 0.5412275664688855
-    },
-    {
-      "message": "cuando juega la seleccion ",
-      "timestamp": 1757349399698,
-      "context": [],
-      "topScore": 0.5775638557721078
     }
   ]
 }

@@ -95,6 +95,28 @@ app.post("/chat", async (req: Request, res: Response) => {
   if (!sessionId || !message)
     return res.status(400).json({ error: "Falta sessionId o mensaje" });
 
+  // ------------------ Validación de mensaje flexible ------------------
+  function isValidMessage(msg: string): boolean {
+    const trimmed = msg.trim();
+
+    // Bloquear mensajes muy cortos (menos de 5 caracteres)
+    if (trimmed.length < 5) return false;
+
+    // Debe contener al menos una letra
+    if (!/[a-zA-Z]/.test(trimmed)) return false;
+
+    // Bloquear mensajes que sean solo símbolos o números
+    if (/^[^a-zA-Z]+$/.test(trimmed)) return false;
+
+    return true;
+  }
+
+  if (!isValidMessage(message)) {
+    const invalidMsg =
+      "⚠️ No entiendo tu mensaje. Por favor escribe una oración o pregunta clara.";
+    return res.json({ textResponse: invalidMsg, contextFound: false });
+  }
+
   // ------------------ Manejo de sesión ------------------
   if (!sessions[sessionId])
     sessions[sessionId] = { messages: [], lastActive: Date.now() };
@@ -118,21 +140,19 @@ app.post("/chat", async (req: Request, res: Response) => {
     return res.json({ textResponse: saludo, contextFound: false });
   }
 
-  // ------------------ Recuperar contexto (solo si no es saludo) ------------------
-  const context = await retrieveContext(message, 2, 5, 0.65); 
-  // topN=2, minWords=5, minScore=0.65
-  // ------------------ Calcular topScore global ------------------
+  // ------------------ Recuperar contexto ------------------
+  const context = await retrieveContext(message, 2, 5, 0.65);
   const qEmbedding = await getEmbedding(message);
   let topScore = 0;
 
-if (qEmbedding) {
-  topScore =
-    knowledgeBase
-      .map((c) => cosineSimilarity(qEmbedding, c.embedding))
-      .sort((a, b) => b - a)[0] ?? 0;
-} else {
-  console.warn(`⚠️ No se pudo generar embedding para la pregunta: "${message}"`);
-}
+  if (qEmbedding) {
+    topScore =
+      knowledgeBase
+        .map((c) => cosineSimilarity(qEmbedding, c.embedding))
+        .sort((a, b) => b - a)[0] ?? 0;
+  } else {
+    console.warn(`⚠️ No se pudo generar embedding para la pregunta: "${message}"`);
+  }
 
   const STRICT_THRESHOLD = 0.7;
 
@@ -141,7 +161,7 @@ if (qEmbedding) {
     const warningMessage =
       "⚠️ Aun estoy aprendiendo y no tengo la respuesta, pero la guardaré para que los responsables la revisen pronto.";
 
-      saveUnansweredMessage(sessionId, message, context ? [context] : [], topScore);
+    saveUnansweredMessage(sessionId, message, context ? [context] : [], topScore);
 
     session.messages.push({
       role: "assistant",
@@ -156,7 +176,7 @@ if (qEmbedding) {
   }
 
   // ------------------ Preparar prompt para LLM ------------------
-const systemPrompt = `
+  const systemPrompt = `
 Eres un asistente virtual de la Alcaldía de Yopal.  
 Responde SOLO con la información del contexto.  
 
@@ -170,7 +190,6 @@ Reglas:
 ${context}
 `;
 
-  // ------------------ Enviar al LLM solo el último mensaje ------------------
   const lastMessages = session.messages.slice(-1);
   const finalMessages: ChatMessage[] = [
     { role: "system", content: systemPrompt, timestamp: Date.now() },
@@ -189,35 +208,23 @@ ${context}
   // ------------------ Logging de chunks más relevantes ------------------
   let ranked: { text: string; score: number }[] = [];
 
-if (qEmbedding) {
-  ranked = knowledgeBase
-    .map((chunk) => ({
-      text: chunk.text,
-      score: cosineSimilarity(qEmbedding, chunk.embedding),
-    }))
-    .sort((a, b) => b.score - a.score);
-} else {
-  console.warn("⚠️ No se pudo generar embedding para la pregunta, no se calcularán scores.");
-}
-  ranked
-    .slice(0, 3)
-    .forEach((r, i) =>
-      console.log(
-        `   #${i + 1} → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(
-          0,
-          80
-        )}...`
-      )
-    );
+  if (qEmbedding) {
+    ranked = knowledgeBase
+      .map((chunk) => ({
+        text: chunk.text,
+        score: cosineSimilarity(qEmbedding, chunk.embedding),
+      }))
+      .sort((a, b) => b.score - a.score);
+  } else {
+    console.warn("⚠️ No se pudo generar embedding para la pregunta, no se calcularán scores.");
+  }
+  ranked.slice(0, 3).forEach((r, i) =>
+    console.log(
+      `   #${i + 1} → Score: ${r.score.toFixed(3)} | Texto: ${r.text.slice(0, 80)}...`
+    )
+  );
 
   return res.json({ textResponse: respuesta, contextFound: true });
-});
-
-// ---------------- Endpoint /history ----------------
-app.get("/history/:sessionId", (req, res) => {
-  const session = sessions[req.params.sessionId];
-  if (!session) return res.status(404).json({ error: "Sesión no encontrada" });
-  res.json(session.messages);
 });
 
 // ---------------- Iniciar servidor ----------------

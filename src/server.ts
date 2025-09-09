@@ -4,6 +4,9 @@ import fetch from "node-fetch";
 import type { Request, Response } from "express";
 import { saveUnansweredMessage } from "./rag.ts";
 import { isGreeting } from "./rag.ts";
+import dotenv from "dotenv";
+dotenv.config();
+
 
 
 // Importar RAG sin extensión
@@ -18,6 +21,9 @@ import {
 const app = express();
 app.use(cors());
 app.use(express.json());
+const LLM_API_URL = process.env.LLM_API_URL!;
+const PORT = process.env.PORT!;
+
 
 // ---------------- Sesiones ----------------
 interface ChatMessage {
@@ -66,7 +72,7 @@ function isLMResponse(data: any): data is LMResponse {
 async function generateAIResponse(messages: ChatMessage[]): Promise<string> {
   try {
     const lmResponse = await fetch(
-      "http://10.0.0.17:1234/v1/chat/completions",
+      LLM_API_URL,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -228,7 +234,7 @@ ${context}
 });
 
 // ---------------- Iniciar servidor ----------------
-const PORT = 3001;
+
 app.listen(PORT, async () => {
   console.log(`🚀 Backend listo en http://localhost:${PORT}`);
   //arranca la funcion para crear los chucks

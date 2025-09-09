@@ -3,6 +3,8 @@ import path from "path";
 import mammoth from "mammoth";
 import fetch from "node-fetch";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+dotenv.config();
 
 interface Chunk {
   text: string;
@@ -15,6 +17,7 @@ interface Chunk {
 // ----------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const EMBEDDING_API_URL = process.env.EMBEDDING_API_URL!;
 
 // Base de conocimiento en memoria
 export let knowledgeBase: Chunk[] = [];
@@ -77,7 +80,7 @@ export async function getEmbedding(
       cleanText = cleanText.slice(0, maxChars);
     }
 
-    const response = await fetch("http://10.0.0.17:1234/v1/embeddings", {
+    const response = await fetch(EMBEDDING_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
